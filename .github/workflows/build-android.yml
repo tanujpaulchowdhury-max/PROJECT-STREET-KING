@@ -1,134 +1,24 @@
-name: Build Android APK
-
-on:
-workflow_dispatch:
-push:
-branches: [main]
-
-jobs:
-inspect:
-runs-on: ubuntu-latest
-steps:
-- name: Checkout repository
-uses: actions/checkout@v4
-
-  - name: Inspect game code
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y unzip
-      mkdir -p project
-      ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
-      test -n "$ZIP_FILE"
-      unzip -oq "$ZIP_FILE" -d project
-      PROJECT_FILE="$(find project -name project.godot -print -quit)"
-      test -n "$PROJECT_FILE"
-      PROJECT_DIR="$(dirname "$PROJECT_FILE")"
-      echo "=== MAIN SCRIPT LINES 80-135 ==="
-      nl -ba "$PROJECT_DIR/scripts/main.gd" | sed -n '80,135p'
-      echo "=== ANDROID EXPORT SETTINGS ==="
-      if [ -f "$PROJECT_DIR/export_presets.cfg" ]; then
-        cat "$PROJECT_DIR/export_presets.cfg"
-      else
-        echo "No export_presets.cfg found"
-      fi1m 3s
-Run docker pull barichello/godot-ci:4.5.1
-4.5.1: Pulling from barichello/godot-ci
-a3629ac5b9f4: Pulling fs layer
-e9446925614e: Pulling fs layer
-557dfd12fc15: Pulling fs layer
-07ca177ad999: Pulling fs layer
-ef6b9b1506e4: Pulling fs layer
-4f4fb700ef54: Pulling fs layer
-a94e923066d2: Pulling fs layer
-c9999459f439: Pulling fs layer
-acf1798889eb: Pulling fs layer
-e68e3969e05d: Pulling fs layer
-c2ecabc392db: Pulling fs layer
-a812a9473a17: Pulling fs layer
-41053d5f2f27: Pulling fs layer
-c2eb3dba3f20: Pulling fs layer
-03eadafd73af: Pulling fs layer
-86918b613568: Pulling fs layer
-bce51ed6e05f: Pulling fs layer
-1367f90a789d: Pulling fs layer
-4ec4476f3f23: Pulling fs layer
-678bf6eafbde: Pulling fs layer
-07ca177ad999: Waiting
-ef6b9b1506e4: Waiting
-4f4fb700ef54: Waiting
-a94e923066d2: Waiting
-c9999459f439: Waiting
-a812a9473a17: Waiting
-41053d5f2f27: Waiting
-acf1798889eb: Waiting
-c2eb3dba3f20: Waiting
-e68e3969e05d: Waiting
-03eadafd73af: Waiting
-c2ecabc392db: Waiting
-86918b613568: Waiting
-bce51ed6e05f: Waiting
-1367f90a789d: Waiting
-4ec4476f3f23: Waiting
-678bf6eafbde: Waiting
-a3629ac5b9f4: Verifying Checksum
-a3629ac5b9f4: Download complete
-07ca177ad999: Verifying Checksum
-07ca177ad999: Download complete
-e9446925614e: Verifying Checksum
-e9446925614e: Download complete
-4f4fb700ef54: Verifying Checksum
-4f4fb700ef54: Download complete
-ef6b9b1506e4: Verifying Checksum
-ef6b9b1506e4: Download complete
-a94e923066d2: Verifying Checksum
-a94e923066d2: Download complete
-acf1798889eb: Download complete
-e68e3969e05d: Download complete
-c2ecabc392db: Verifying Checksum
-c2ecabc392db: Download complete
-a812a9473a17: Verifying Checksum
-a812a9473a17: Download complete
-a3629ac5b9f4: Pull complete
-41053d5f2f27: Verifying Checksum
-41053d5f2f27: Download complete
-c2eb3dba3f20: Verifying Checksum
-c2eb3dba3f20: Download complete
-03eadafd73af: Verifying Checksum
-03eadafd73af: Download complete
-86918b613568: Download complete
-bce51ed6e05f: Verifying Checksum
-bce51ed6e05f: Download complete
-1367f90a789d: Verifying Checksum
-1367f90a789d: Download complete
-4ec4476f3f23: Verifying Checksum
-4ec4476f3f23: Download complete
-678bf6eafbde: Verifying Checksum
-678bf6eafbde: Download complete
-c9999459f439: Verifying Checksum
-c9999459f439: Download complete
-557dfd12fc15: Verifying Checksum
-557dfd12fc15: Download complete
-e9446925614e: Pull complete
-557dfd12fc15: Pull complete
-07ca177ad999: Pull complete
-ef6b9b1506e4: Pull complete
-4f4fb700ef54: Pull complete
-a94e923066d2: Pull complete
-c9999459f439: Pull complete
-acf1798889eb: Pull complete
-e68e3969e05d: Pull complete
-c2ecabc392db: Pull complete
-a812a9473a17: Pull complete
-41053d5f2f27: Pull complete
-c2eb3dba3f20: Pull complete
-03eadafd73af: Pull complete
-86918b613568: Pull complete
-bce51ed6e05f: Pull complete
-1367f90a789d: Pull complete
-4ec4476f3f23: Pull complete
-678bf6eafbde: Pull complete
-Digest: sha256:ed732ef7d470463cbcfbcbdc721ad798fab5a576705bd76587ce824f2cb98e59
-Status: Downloaded newer image for barichello/godot-ci:4.5.1
-docker.io/barichello/godot-ci:4.5.1
-ERROR: Android SDK sdkmanager was not found in the build image.
-Error: Process completed with exit code 1.
+{
+  "name": "Build Android APK",
+  "on": {
+    "workflow_dispatch": {},
+    "push": {
+      "branches": ["main"]
+    }
+  },
+  "jobs": {
+    "inspect": {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "name": "Checkout repository",
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "name": "Inspect game code",
+          "run": "sudo apt-get update && sudo apt-get install -y unzip && mkdir -p project && ZIP_FILE=\"$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)\" && test -n \"$ZIP_FILE\" && unzip -oq \"$ZIP_FILE\" -d project && PROJECT_FILE=\"$(find project -name project.godot -print -quit)\" && test -n \"$PROJECT_FILE\" && PROJECT_DIR=\"$(dirname \"$PROJECT_FILE\")\" && echo '=== MAIN SCRIPT LINES 80-135 ===' && nl -ba \"$PROJECT_DIR/scripts/main.gd\" | sed -n '80,135p' && echo '=== ANDROID EXPORT SETTINGS ===' && if [ -f \"$PROJECT_DIR/export_presets.cfg\" ]; then cat \"$PROJECT_DIR/export_presets.cfg\"; else echo 'No export_presets.cfg found'; fi"
+        }
+      ]
+    }
+  }
+}
