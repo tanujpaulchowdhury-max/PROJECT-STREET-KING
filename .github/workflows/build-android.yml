@@ -45,7 +45,30 @@ jobs:
             -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
             -w /work barichello/godot-ci:4.5.1 \
             godot --headless --path "/work/$PROJECT_DIR" --editor --quit
-
+- name: Enable Gradle Android export
+    run: |
+      python3 - <<'PY'
+      import os, re
+      from pathlib import Path
+      p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
+      s = p.read_text()
+      m = re.search(r'(?m)^\[preset\.(\d+)\]\s*\n(?:(?!^\[).*\n)*?name="Android"', s)
+      if not m:
+          raise SystemExit("Android export preset not found")
+      n = m.group(1)
+      h = f"[preset.{n}.options]"
+      parts = re.split(r'(?m)(?=^\[)', s)
+      for i, part in enumerate(parts):
+          if part.startswith(h + "\n") or part.strip() == h:
+              if re.search(r'(?m)^gradle_build/use_gradle_build=', part):
+                  parts[i] = re.sub(r'(?m)^gradle_build/use_gradle_build=.*$', 'gradle_build/use_gradle_build=true', part)
+              else:
+                  parts[i] = part.rstrip() + "\ngradle_build/use_gradle_build=true\n"
+              break
+      else:
+          parts.append("\n" + h + "\ngradle_build/use_gradle_build=true\n")
+      p.write_text("".join(parts))
+      PY
       - name: Export Android APK
         run: |
           mkdir -p build
