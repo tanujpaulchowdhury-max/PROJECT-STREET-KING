@@ -1,150 +1,143 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+workflow_dispatch:
+push:
+branches: [main]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-22.04
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      - name: Install unzip
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
+  - name: Install unzip and Java
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y unzip openjdk-17-jdk
+      java -version
 
-      - name: Extract Godot project
-        run: |
-          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
-          test -n "$ZIP_FILE" || { echo "Project ZIP not found"; exit 1; }
+  - name: Setup Android SDK
+    uses: android-actions/setup-android@v3
 
-          mkdir -p project
-          unzip -oq "$ZIP_FILE" -d project
+  - name: Install Android SDK packages
+    run: |
+      sdkmanager --install \
+        "platform-tools" \
+        "platforms;android-34" \
+        "build-tools;34.0.0"
+      yes | sdkmanager --licenses || true
 
-          PROJECT_FILE="$(find project -name project.godot -print -quit)"
-          test -n "$PROJECT_FILE" || { echo "project.godot not found"; exit 1; }
+  - name: Extract Godot project
+    run: |
+      ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
+      test -n "$ZIP_FILE" || { echo "Project ZIP not found"; exit 1; }
 
-          PROJECT_DIR="$(dirname "$PROJECT_FILE")"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+      mkdir -p project
+      unzip -oq "$ZIP_FILE" -d project
 
-      - name: Download Godot export templates
-        run: |
-          curl -fL \
-            https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz \
-            -o templates.tpz
+      PROJECT_FILE="$(find project -name project.godot -print -quit)"
+      test -n "$PROJECT_FILE" || { echo "project.godot not found"; exit 1; }
 
-          mkdir -p /tmp/godot-templates
-          unzip -oq templates.tpz -d /tmp/godot-templates
-          mkdir -p godot_templates/4.5.1.stable
-          cp -a /tmp/godot-templates/templates/. godot_templates/4.5.1.stable/
+      PROJECT_DIR="$(dirname "$PROJECT_FILE")"
+      echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+      echo "Godot project: $PROJECT_DIR"
 
-      - name: Configure Android preset
-        run: |
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
+  - name: Download Godot and export templates
+    run: |
+      curl -fL \
+        https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_linux.x86_64.zip \
+        -o godot.zip
 
-          p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
-          if not p.exists():
-              raise SystemExit("export_presets.cfg is missing")
+      unzip -oq godot.zip -d godot-bin
+      GODOT="$(find "$PWD/godot-bin" -type f -name 'Godot_v4.5.1-stable_linux.x86_64' -print -quit)"
+      test -n "$GODOT" || { echo "Godot executable not found"; exit 1; }
+      chmod +x "$GODOT"
+      echo "GODOT=$GODOT" >> "$GITHUB_ENV"
 
-          sections = re.split(r'(?m)(?=^\[)', p.read_text())
-          found = False
+      curl -fL \
+        https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz \
+        -o templates.tpz
 
-          for i, section in enumerate(sections):
-              header = section.splitlines()[0] if section.splitlines() else ""
-              match = re.fullmatch(r'\[preset\.(\d+)\]', header.strip())
+      mkdir -p "$HOME/.local/share/godot/export_templates/4.5.1.stable"
+      unzip -oq templates.tpz -d templates-unpacked
+      cp -a templates-unpacked/templates/. \
+        "$HOME/.local/share/godot/export_templates/4.5.1.stable/"
 
-              if match and re.search(r'(?m)^name="Android"\s*$', section):
-                  number = match.group(1)
-                  options_header = f"[preset.{number}.options]"
+  - name: Configure Android export preset
+    run: |
+      python3 - <<'PY'
+      import os, re
+      from pathlib import Path
 
-                  for j, options in enumerate(sections):
-                      first = options.splitlines()[0] if options.splitlines() else ""
+      p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
+      if not p.exists():
+          raise SystemExit("ERROR: export_presets.cfg is missing")
 
-                      if first.strip() == options_header:
-                          if re.search(r'(?m)^gradle_build/use_gradle_build=', options):
-                              sections[j] = re.sub(
-                                  r'(?m)^gradle_build/use_gradle_build=.*$',
-                                  'gradle_build/use_gradle_build=false',
-                                  options
-                              )
-                          else:
-                              sections[j] = options.rstrip() + \
-                                  '\ngradle_build/use_gradle_build=false\n'
-                          break
-                  else:
-                      sections.append(
-                          '\n' + options_header +
-                          '\ngradle_build/use_gradle_build=false\n'
+      content = p.read_text()
+      sections = re.split(r'(?m)(?=^\[)', content)
+      found = False
+
+      for i, section in enumerate(sections):
+          header = section.splitlines()[0].strip() if section.splitlines() else ""
+          if not re.fullmatch(r'\[preset\.\d+\]', header):
+              continue
+          if not re.search(r'(?m)^name="Android"\s*$', section):
+              continue
+
+          number = header[len("[preset."):-1]
+          options_header = f"[preset.{number}.options]"
+          for j, options in enumerate(sections):
+              first = options.splitlines()[0].strip() if options.splitlines() else ""
+              if first == options_header:
+                  if re.search(r'(?m)^gradle_build/use_gradle_build=', options):
+                      sections[j] = re.sub(
+                          r'(?m)^gradle_build/use_gradle_build=.*$',
+                          'gradle_build/use_gradle_build=true',
+                          options
                       )
-
-                  found = True
+                  else:
+                      sections[j] = options.rstrip() + '\ngradle_build/use_gradle_build=true\n'
                   break
+          else:
+              sections.append('\n' + options_header + '\ngradle_build/use_gradle_build=true\n')
 
-          if not found:
-              raise SystemExit("Android export preset not found")
+          found = True
+          break
 
-          p.write_text(''.join(sections))
-          print("Android preset configured.")
-          PY
+      if not found:
+          raise SystemExit('ERROR: Android export preset not found')
 
-      - name: Import project and export APK
-        run: |
-          docker pull barichello/godot-ci:4.5.1
-          mkdir -p build
+      p.write_text(''.join(sections))
+      print('Android Gradle export enabled.')
+      PY
 
-          docker run --rm \
-            -v "$PWD:/work" \
-            -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
-            -w /work \
-            -e PROJECT_DIR="$PROJECT_DIR" \
-            barichello/godot-ci:4.5.1 \
-            bash -lc '
-              set -e
+  - name: Import project and show script errors
+    run: |
+      set +e
+      "$GODOT" --headless --editor --path "$PROJECT_DIR" --quit
+      STATUS=$?
+      if [ "$STATUS" -ne 0 ]; then
+        echo "Godot import failed. Showing main.gd around the reported lines:"
+        nl -ba "$PROJECT_DIR/scripts/main.gd" | sed -n '80,135p'
+        exit "$STATUS"
+      fi
 
-              SDKMANAGER="$(find /usr/lib /opt /usr/local /root -type f -name sdkmanager 2>/dev/null | head -n 1)"
+  - name: Export Android APK
+    run: |
+      mkdir -p build
+      "$GODOT" --headless \
+        --path "$PROJECT_DIR" \
+        --export-debug "Android" \
+        "$PWD/build/PROJECT_STREET_KING.apk"
 
-              if [ -z "$SDKMANAGER" ]; then
-                echo "ERROR: sdkmanager was not found in the Docker image."
-                exit 1
-              fi
-
-              SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-
-              if [ -z "$SDK_ROOT" ]; then
-                SDK_ROOT="${SDKMANAGER%%/cmdline-tools/*}"
-                SDK_ROOT="${SDK_ROOT%%/tools/*}"
-              fi
-
-              echo "Android SDK: $SDK_ROOT"
-
-              yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses || true
-
-              "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
-                "platform-tools" \
-                "platforms;android-33" \
-                "build-tools;33.0.2"
-
-              godot --headless --editor \
-                --path "/work/$PROJECT_DIR" --quit
-
-              godot --headless \
-                --path "/work/$PROJECT_DIR" \
-                --export-debug "Android" \
-                /work/build/PROJECT_STREET_KING.apk
-            '
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PROJECT-STREET-KING-APK
-          path: build/PROJECT_STREET_KING.apk
-          if-no-files-found: error
-          retention-days: 14
+  - name: Upload APK
+    if: success()
+    uses: actions/upload-artifact@v4
+    with:
+      name: PROJECT-STREET-KING-APK
+      path: build/PROJECT_STREET_KING.apk
+      if-no-files-found: error
+      retention-days: 14
