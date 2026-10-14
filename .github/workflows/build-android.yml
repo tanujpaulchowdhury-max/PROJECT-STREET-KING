@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find and extract project ZIP
+      - name: Extract project ZIP
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip
@@ -27,41 +27,32 @@ jobs:
           PROJECT_DIR="$(dirname "$PROJECT_FILE")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+      - name: Download Godot Android export templates
+        run: |
+          curl -fL \
+            https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz \
+            -o templates.tpz
+          mkdir -p /tmp/godot-templates
+          unzip -oq templates.tpz -d /tmp/godot-templates
+          mkdir -p godot_templates/4.5.1.stable
+          cp -a /tmp/godot-templates/templates/. godot_templates/4.5.1.stable/
+
       - name: Import Godot project
         run: |
           docker pull barichello/godot-ci:4.5.1
-          docker run --rm -v "$PWD:/work" -w /work barichello/godot-ci:4.5.1 \
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
+            -w /work barichello/godot-ci:4.5.1 \
             godot --headless --path "/work/$PROJECT_DIR" --editor --quit
-
-      - name: Fix Android export preset
-        run: |
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
-          if not p.exists():
-              raise SystemExit("Missing export_presets.cfg")
-          text = p.read_text()
-          chunks = re.split(r'(?=^\[preset\.\d+\]$)', text, flags=re.M)
-          for i, chunk in enumerate(chunks):
-              if re.search(r'^name="Android"$', chunk, re.M):
-                  key = r'^gradle_build/use_gradle_build=.*$'
-                  if re.search(key, chunk, re.M):
-                      chunk = re.sub(key, 'gradle_build/use_gradle_build=true', chunk, count=1, flags=re.M)
-                  else:
-                      chunk = re.sub(r'(^\[preset\.\d+\.options\]\n)', r'\1gradle_build/use_gradle_build=true\n', chunk, count=1, flags=re.M)
-                  chunks[i] = chunk
-                  break
-          else:
-              raise SystemExit("Android export preset not found")
-          p.write_text("".join(chunks))
-          print("Android Gradle export enabled")
-          PY
 
       - name: Export Android APK
         run: |
           mkdir -p build
-          docker run --rm -v "$PWD:/work" -w /work barichello/godot-ci:4.5.1 \
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
+            -w /work barichello/godot-ci:4.5.1 \
             godot --headless --path "/work/$PROJECT_DIR" \
             --export-debug "Android" /work/build/PROJECT_STREET_KING.apk
 
