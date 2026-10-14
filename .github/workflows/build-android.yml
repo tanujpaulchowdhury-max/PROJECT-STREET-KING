@@ -1,39 +1,42 @@
-
 {
-  "name": "Build Android APK",
-  "on": {
-    "workflow_dispatch": {},
-    "push": {
-      "branches": ["main"]
-    }
-  },
-  "jobs": {
-    "build": {
-      "runs-on": "ubuntu-latest",
-      "container": "barichello/godot-ci:4.5.1",
-      "steps": [
-        {
-          "name": "Checkout repository",
-          "uses": "actions/checkout@v4"
-        },
-        {
-          "name": "Extract game project",
-          "run": "apt-get update && apt-get install -y unzip && mkdir -p project && ZIP_FILE=\"$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)\" && test -n \"$ZIP_FILE\" && unzip -oq \"$ZIP_FILE\" -d project && PROJECT_FILE=\"$(find project -name project.godot -print -quit)\" && test -n \"$PROJECT_FILE\" && echo \"PROJECT_DIR=$(dirname \"$PROJECT_FILE\")\" >> \"$GITHUB_ENV\""
-        },
-        {
-          "name": "Import and build APK",
-          "run": "mkdir -p build && godot --headless --editor --path \"$PROJECT_DIR\" --import && godot --headless --path \"$PROJECT_DIR\" --export-debug \"Android\" build/PROJECT_STREET_KING.apk"
-        },
-        {
-          "name": "Upload APK",
-          "uses": "actions/upload-artifact@v4",
-          "with": {
-            "name": "PROJECT-STREET-KING-APK",
-            "path": "build/PROJECT_STREET_KING.apk",
-            "if-no-files-found": "error"
-          }
-        }
-      ]
-    }
-  }
+"name": "Build Android APK",
+"on": {
+"workflow_dispatch": {},
+"push": {
+"branches": ["main"]
+}
+},
+"jobs": {
+"build": {
+"runs-on": "ubuntu-latest",
+"container": "barichello/godot-ci:4.5.1",
+"steps": [
+{
+"name": "Checkout repository",
+"uses": "actions/checkout@v4"
+},
+{
+"name": "Prepare Android export",
+"run": "mkdir -p "$HOME/.local/share/godot/export_templates" "$HOME/.config/godot" && cp -a /root/.local/share/godot/export_templates/4.5.1.stable "$HOME/.local/share/godot/export_templates/" && cp /root/.config/godot/editor_settings-4.5.tres "$HOME/.config/godot/""
+},
+{
+"name": "Extract game project",
+"run": "apt-get update && apt-get install -y unzip && mkdir -p project && ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)" && test -n "$ZIP_FILE" && unzip -oq "$ZIP_FILE" -d project && PROJECT_FILE="$(find project -name project.godot -print -quit)" && test -n "$PROJECT_FILE" && echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV""
+},
+{
+"name": "Import and build APK",
+"run": "mkdir -p build && godot --headless --editor --path "$PROJECT_DIR" --import && godot --headless --path "$PROJECT_DIR" --export-debug "Android" build/PROJECT_STREET_KING.apk"
+},
+{
+"name": "Upload APK",
+"uses": "actions/upload-artifact@v4",
+"with": {
+"name": "PROJECT-STREET-KING-APK",
+"path": "build/PROJECT_STREET_KING.apk",
+"if-no-files-found": "error"
+}
+}
+]
+}
+}
 }
