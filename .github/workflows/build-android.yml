@@ -22,6 +22,7 @@ jobs:
         run: |
           ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
           test -n "$ZIP_FILE" || { echo "Project ZIP not found"; exit 1; }
+
           mkdir -p project
           unzip -oq "$ZIP_FILE" -d project
 
@@ -42,7 +43,7 @@ jobs:
           mkdir -p godot_templates/4.5.1.stable
           cp -a /tmp/godot-templates/templates/. godot_templates/4.5.1.stable/
 
-      - name: Prepare Android export preset
+      - name: Configure Android preset
         run: |
           python3 - <<'PY'
           import os
@@ -53,8 +54,7 @@ jobs:
           if not p.exists():
               raise SystemExit("export_presets.cfg is missing")
 
-          text = p.read_text()
-          sections = re.split(r'(?m)(?=^\[)', text)
+          sections = re.split(r'(?m)(?=^\[)', p.read_text())
           found = False
 
           for i, section in enumerate(sections):
@@ -67,6 +67,7 @@ jobs:
 
                   for j, options in enumerate(sections):
                       first = options.splitlines()[0] if options.splitlines() else ""
+
                       if first.strip() == options_header:
                           if re.search(r'(?m)^gradle_build/use_gradle_build=', options):
                               sections[j] = re.sub(
@@ -91,7 +92,7 @@ jobs:
               raise SystemExit("Android export preset not found")
 
           p.write_text(''.join(sections))
-          print("Android preset configured to use prebuilt templates.")
+          print("Android preset configured.")
           PY
 
       - name: Import project and export APK
@@ -103,29 +104,41 @@ jobs:
             -v "$PWD:/work" \
             -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
             -w /work \
+            -e PROJECT_DIR="$PROJECT_DIR" \
             barichello/godot-ci:4.5.1 \
             bash -lc '
               set -e
 
-              SDKMANAGER="$(find /opt /usr/local /root -type f -name sdkmanager 2>/dev/null | head -n 1)"
-              if [ -n "$SDKMANAGER" ]; then
-                SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-                if [ -z "$SDK_ROOT" ]; then
-                  SDK_ROOT="${SDKMANAGER%%/cmdline-tools/*}"
-                  SDK_ROOT="${SDK_ROOT%%/tools/*}"
-                fi
+              SDKMANAGER="$(find /usr/lib /opt /usr/local /root -type f -name sdkmanager 2>/dev/null | head -n 1)"
 
-                yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses || true
-                "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
-                  "platform-tools" "platforms;android-33" "build-tools;33.0.2"
-              else
-                echo "ERROR: Android SDK sdkmanager was not found in the build image."
+              if [ -z "$SDKMANAGER" ]; then
+                echo "ERROR: sdkmanager was not found in the Docker image."
                 exit 1
               fi
 
-              godot --headless --editor --path "/work/$PROJECT_DIR" --quit
-              godot --headless --path "/work/$PROJECT_DIR" \
-                --export-debug "Android" /work/build/PROJECT_STREET_KING.apk
+              SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+
+              if [ -z "$SDK_ROOT" ]; then
+                SDK_ROOT="${SDKMANAGER%%/cmdline-tools/*}"
+                SDK_ROOT="${SDK_ROOT%%/tools/*}"
+              fi
+
+              echo "Android SDK: $SDK_ROOT"
+
+              yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses || true
+
+              "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+                "platform-tools" \
+                "platforms;android-33" \
+                "build-tools;33.0.2"
+
+              godot --headless --editor \
+                --path "/work/$PROJECT_DIR" --quit
+
+              godot --headless \
+                --path "/work/$PROJECT_DIR" \
+                --export-debug "Android" \
+                /work/build/PROJECT_STREET_KING.apk
             '
 
       - name: Upload APK
