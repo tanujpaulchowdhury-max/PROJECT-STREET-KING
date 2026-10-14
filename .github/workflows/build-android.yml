@@ -36,6 +36,8 @@ jobs:
 
       - name: Build APK
         run: |
+          test -f "$PROJECT_DIR/export_presets.cfg"
+          sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' "$PROJECT_DIR/export_presets.cfg"
           mkdir -p build
           godot --headless --editor --path "$PROJECT_DIR" --import
           godot --headless --path "$PROJECT_DIR" --export-debug "Android" build/PROJECT_STREET_KING.apk
