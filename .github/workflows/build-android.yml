@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -13,10 +14,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project ZIP
+      - name: Install unzip
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip
+
+      - name: Extract Godot project
+        run: |
           ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
           test -n "$ZIP_FILE" || { echo "Project ZIP not found"; exit 1; }
           mkdir -p project
@@ -26,7 +30,7 @@ jobs:
           PROJECT_DIR="$(dirname "$PROJECT_FILE")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Download Godot Android export templates
+      - name: Download Android export templates
         run: |
           curl -fL \
             https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz \
@@ -44,30 +48,65 @@ jobs:
             -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
             -w /work barichello/godot-ci:4.5.1 \
             godot --headless --path "/work/$PROJECT_DIR" --editor --quit
-- name: Enable Gradle Android export
-    run: |
-      python3 - <<'PY'
-      import os, re
-      from pathlib import Path
-      p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
-      s = p.read_text()
-      m = re.search(r'(?m)^\[preset\.(\d+)\]\s*\n(?:(?!^\[).*\n)*?name="Android"', s)
-      if not m:
-          raise SystemExit("Android export preset not found")
-      n = m.group(1)
-      h = f"[preset.{n}.options]"
-      parts = re.split(r'(?m)(?=^\[)', s)
-      for i, part in enumerate(parts):
-          if part.startswith(h + "\n") or part.strip() == h:
-              if re.search(r'(?m)^gradle_build/use_gradle_build=', part):
-                  parts[i] = re.sub(r'(?m)^gradle_build/use_gradle_build=.*$', 'gradle_build/use_gradle_build=true', part)
-              else:
-                  parts[i] = part.rstrip() + "\ngradle_build/use_gradle_build=true\n"
-              break
-      else:
-          parts.append("\n" + h + "\ngradle_build/use_gradle_build=true\n")
-      p.write_text("".join(parts))
-      PY
+
+      - name: Enable Gradle Android export
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          p = Path(os.environ["PROJECT_DIR"]) / "export_presets.cfg"
+          if not p.exists():
+              raise SystemExit("export_presets.cfg is missing")
+
+          text = p.read_text()
+          sections = re.split(r'(?m)(?=^\[)', text)
+          preset_number = None
+
+          for section in sections:
+              header = section.splitlines()[0] if section.splitlines() else ""
+              match = re.fullmatch(r'\[preset\.(\d+)\]', header.strip())
+              if match and re.search(r'(?m)^name="Android"\s*$', section):
+                  preset_number = match.group(1)
+                  break
+
+          if preset_number is None:
+              raise SystemExit("Android export preset not found")
+
+          options_header = f"[preset.{preset_number}.options]"
+          for i, section in enumerate(sections):
+              header = section.splitlines()[0] if section.splitlines() else ""
+              if header.strip() == options_header:
+                  if re.search(r'(?m)^gradle_build/use_gradle_build=', section):
+                      sections[i] = re.sub(
+                          r'(?m)^gradle_build/use_gradle_build=.*$',
+                          'gradle_build/use_gradle_build=true',
+                          section
+                      )
+                  else:
+                      sections[i] = section.rstrip() + \
+                          '\ngradle_build/use_gradle_build=true\n'
+                  break
+          else:
+              sections.append(
+                  '\n' + options_header +
+                  '\ngradle_build/use_gradle_build=true\n'
+              )
+
+          p.write_text(''.join(sections))
+          print("Gradle Android export enabled")
+          PY
+
+      - name: Install Android build template
+        run: |
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$PWD/godot_templates:/root/.local/share/godot/export_templates" \
+            -w /work barichello/godot-ci:4.5.1 \
+            godot --headless --path "/work/$PROJECT_DIR" \
+            --editor --quit --install-android-build-template
+
       - name: Export Android APK
         run: |
           mkdir -p build
@@ -85,4 +124,3 @@ jobs:
           path: build/PROJECT_STREET_KING.apk
           if-no-files-found: error
           retention-days: 14
-
