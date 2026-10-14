@@ -1,3 +1,4 @@
+
 {
   "name": "Build Android APK",
   "on": {
@@ -7,16 +8,30 @@
     }
   },
   "jobs": {
-    "inspect": {
+    "build": {
       "runs-on": "ubuntu-latest",
+      "container": "barichello/godot-ci:4.5.1",
       "steps": [
         {
           "name": "Checkout repository",
           "uses": "actions/checkout@v4"
         },
         {
-          "name": "Inspect game code",
-          "run": "sudo apt-get update && sudo apt-get install -y unzip && mkdir -p project && ZIP_FILE=\"$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)\" && test -n \"$ZIP_FILE\" && unzip -oq \"$ZIP_FILE\" -d project && PROJECT_FILE=\"$(find project -name project.godot -print -quit)\" && test -n \"$PROJECT_FILE\" && PROJECT_DIR=\"$(dirname \"$PROJECT_FILE\")\" && echo '=== MAIN SCRIPT LINES 80-135 ===' && nl -ba \"$PROJECT_DIR/scripts/main.gd\" | sed -n '80,135p' && echo '=== ANDROID EXPORT SETTINGS ===' && if [ -f \"$PROJECT_DIR/export_presets.cfg\" ]; then cat \"$PROJECT_DIR/export_presets.cfg\"; else echo 'No export_presets.cfg found'; fi"
+          "name": "Extract game project",
+          "run": "apt-get update && apt-get install -y unzip && mkdir -p project && ZIP_FILE=\"$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)\" && test -n \"$ZIP_FILE\" && unzip -oq \"$ZIP_FILE\" -d project && PROJECT_FILE=\"$(find project -name project.godot -print -quit)\" && test -n \"$PROJECT_FILE\" && echo \"PROJECT_DIR=$(dirname \"$PROJECT_FILE\")\" >> \"$GITHUB_ENV\""
+        },
+        {
+          "name": "Import and build APK",
+          "run": "mkdir -p build && godot --headless --editor --path \"$PROJECT_DIR\" --import && godot --headless --path \"$PROJECT_DIR\" --export-debug \"Android\" build/PROJECT_STREET_KING.apk"
+        },
+        {
+          "name": "Upload APK",
+          "uses": "actions/upload-artifact@v4",
+          "with": {
+            "name": "PROJECT-STREET-KING-APK",
+            "path": "build/PROJECT_STREET_KING.apk",
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
